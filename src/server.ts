@@ -21,13 +21,15 @@ const PORT = process.env.PORT || 5000;
 const allowedOrigins = [
   process.env.CLIENT_URL || "http://localhost:3000",
   "http://localhost:3000",
+  "http://localhost:3002",
   "http://127.0.0.1:3000",
+  "http://127.0.0.1:3002",
 ];
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, curl, etc.)
+      // Allow requests with no origin or matching allowedOrigins
       if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== "production") {
         callback(null, true);
       } else {
@@ -72,34 +74,30 @@ app.use((err: any, req: Request, res: Response, next: any) => {
   });
 });
 
-// Start Server and verify DB
-const startServer = async () => {
-  try {
-    await connectDB();
+// Start Server immediately and connect DB in background
+app.listen(PORT, () => {
+  console.log(`🚀 AuraMart Backend Server running on http://localhost:${PORT}`);
+  const adminEmail = (process.env.ADMIN_EMAIL || "afnan@gmail.com").toLowerCase().trim();
+  console.log(`🔐 Admin Login configured for: ${adminEmail}`);
 
-    // Auto-check and initialize Admin user
-    const adminEmail = (process.env.ADMIN_EMAIL || "afnan@gmail.com").toLowerCase().trim();
-    const adminPassword = process.env.ADMIN_PASSWORD || "afnan31403140";
-    const existingAdmin = await Admin.findOne({ email: adminEmail });
+  // Connect to DB and seed admin
+  connectDB().then(async () => {
+    try {
+      const adminPassword = process.env.ADMIN_PASSWORD || "afnan31403140";
+      const existingAdmin = await Admin.findOne({ email: adminEmail });
 
-    if (!existingAdmin) {
-      const newAdmin = new Admin({
-        name: "Afnan Johad",
-        email: adminEmail,
-        password: adminPassword,
-        role: "admin",
-      });
-      await newAdmin.save();
-      console.log(`👤 Initial Admin account seeded automatically (${adminEmail})`);
+      if (!existingAdmin) {
+        const newAdmin = new Admin({
+          name: "Afnan Johad",
+          email: adminEmail,
+          password: adminPassword,
+          role: "admin",
+        });
+        await newAdmin.save();
+        console.log(`👤 Initial Admin account seeded automatically (${adminEmail})`);
+      }
+    } catch (e) {
+      // Ignored if DB offline
     }
-
-    app.listen(PORT, () => {
-      console.log(`🚀 AuraMart Backend Server running on http://localhost:${PORT}`);
-      console.log(`🔐 Admin Login configured for: ${adminEmail}`);
-    });
-  } catch (error) {
-    console.error("Failed to start server:", error);
-  }
-};
-
-startServer();
+  });
+});
