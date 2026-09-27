@@ -17,25 +17,10 @@ import uploadRoutes from "./routes/uploadRoutes";
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Enable CORS for frontend
-const allowedOrigins = [
-  process.env.CLIENT_URL || "http://localhost:3000",
-  "http://localhost:3000",
-  "http://localhost:3002",
-  "http://127.0.0.1:3000",
-  "http://127.0.0.1:3002",
-];
-
+// Enable CORS for all frontends (Vercel, custom domain, and localhost)
 app.use(
   cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin or matching allowedOrigins
-      if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== "production") {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
+    origin: true,
     credentials: true,
   })
 );
