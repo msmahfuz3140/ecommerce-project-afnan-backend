@@ -348,27 +348,35 @@ export const trackOrder = async (req: Request, res: Response): Promise<void> => 
         res.status(404).json({ success: false, message: "No orders found for this Phone number or Order ID" });
         return;
       }
-      res.json({ success: true, orders });
+      res.json({ success: true, orders, order: orders[0] });
       return;
     }
 
     const orders = await Order.find({
-      $or: [{ phone: query.trim() }, { orderId: query.trim() }, { orderId: `#${query.trim()}` }],
+      $or: [
+        { phone: query.trim() },
+        { orderId: query.trim() },
+        { orderId: `#${query.trim()}` },
+        { orderId: query.trim().replace(/^#/, "") },
+      ],
     }).sort({ createdAt: -1 });
 
     if (!orders || orders.length === 0) {
       const fallback = mockOrders.filter(
-        (o) => o.phone.includes(query.trim()) || o.orderId.includes(query.trim())
+        (o) =>
+          o.phone.includes(query.trim()) ||
+          o.orderId.includes(query.trim()) ||
+          query.trim().includes(o.orderId.replace("#", ""))
       );
       if (fallback.length > 0) {
-        res.json({ success: true, orders: fallback });
+        res.json({ success: true, orders: fallback, order: fallback[0] });
         return;
       }
       res.status(404).json({ success: false, message: "No orders found for this Phone number or Order ID" });
       return;
     }
 
-    res.json({ success: true, orders });
+    res.json({ success: true, orders, order: orders[0] });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message || "Failed to track order" });
   }
