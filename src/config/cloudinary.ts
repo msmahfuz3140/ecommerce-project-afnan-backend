@@ -8,7 +8,7 @@ cloudinary.config({
 
 export const uploadToCloudinary = async (
   fileBuffer: Buffer,
-  folder: string = "auramart",
+  folder: string = "gaxinmart",
   resourceType: "image" | "raw" | "auto" = "auto"
 ): Promise<{ secure_url: string; public_id: string }> => {
   return new Promise((resolve, reject) => {

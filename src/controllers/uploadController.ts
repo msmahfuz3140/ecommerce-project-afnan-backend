@@ -8,7 +8,7 @@ export const uploadMedia = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    const folder = (req.body.folder as string) || "auramart";
+    const folder = (req.body.folder as string) || "gaxinmart";
     const resourceType = req.file.mimetype === "application/pdf" ? "raw" : "image";
 
     const result = await uploadToCloudinary(req.file.buffer, folder, resourceType);
@@ -33,7 +33,7 @@ export const uploadMultipleMedia = async (req: Request, res: Response): Promise<
       return;
     }
 
-    const folder = (req.body.folder as string) || "auramart";
+    const folder = (req.body.folder as string) || "gaxinmart";
     const uploadPromises = files.map((file) => {
       const resourceType = file.mimetype === "application/pdf" ? "raw" : "image";
       return uploadToCloudinary(file.buffer, folder, resourceType);

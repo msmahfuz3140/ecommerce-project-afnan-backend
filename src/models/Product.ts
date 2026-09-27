@@ -4,7 +4,7 @@ export interface IProduct extends Document {
   name: string;
   slug: string;
   description: string;
-  category: "electronics" | "cosmetics" | "fashion";
+  category: string;
   subCategory?: string;
   buyPrice: number; // Cost / Purchase price (koto diye kena)
   sellPrice: number; // Selling price (koto diye bikri)
@@ -41,7 +41,6 @@ const ProductSchema = new Schema<IProduct>(
     category: {
       type: String,
       required: true,
-      enum: ["electronics", "cosmetics", "fashion"],
       index: true,
     },
     subCategory: {

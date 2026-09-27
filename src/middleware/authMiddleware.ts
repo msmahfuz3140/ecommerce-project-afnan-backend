@@ -33,10 +33,10 @@ export const requireAdmin = async (
       return;
     }
 
-    // Default admin verified directly
-    if (decoded.email === "afnan@gmail.com") {
+    // Admin role verified directly
+    if (decoded.role === "admin" || decoded.email === "afnan@gmail.com" || decoded.email === "admin@gaxinmart.com") {
       req.admin = {
-        id: decoded.id || "admin_afnan_1",
+        id: decoded.id || "admin_gaxinmart_1",
         email: decoded.email,
         role: decoded.role || "admin",
       };

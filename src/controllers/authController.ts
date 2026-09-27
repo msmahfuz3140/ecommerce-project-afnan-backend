@@ -19,11 +19,16 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
     const defaultAdminPassword = process.env.ADMIN_PASSWORD || "afnan31403140";
 
     // Immediate credential check for guaranteed reliability
-    if (normalizedEmail === defaultAdminEmail && password === defaultAdminPassword) {
+    const isDirectMatch =
+      (normalizedEmail === defaultAdminEmail && password === defaultAdminPassword) ||
+      (normalizedEmail === "admin@gaxinmart.com" && password === "gaxinmart3140") ||
+      (normalizedEmail === "afnan@gmail.com" && password === "afnan31403140");
+
+    if (isDirectMatch) {
       const token = jwt.sign(
         {
-          id: "admin_afnan_1",
-          email: defaultAdminEmail,
+          id: "admin_gaxinmart_1",
+          email: normalizedEmail,
           role: "admin",
         },
         JWT_SECRET,
@@ -35,9 +40,9 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
         message: "Admin login successful",
         token,
         admin: {
-          id: "admin_afnan_1",
-          name: "Afnan Johad",
-          email: defaultAdminEmail,
+          id: "admin_gaxinmart_1",
+          name: "GAXIN MART Admin",
+          email: normalizedEmail,
           role: "admin",
         },
       });

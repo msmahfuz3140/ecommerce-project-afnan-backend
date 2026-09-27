@@ -1,7 +1,32 @@
 import { Request, Response } from "express";
+import jwt from "jsonwebtoken";
 import { Product } from "../models/Product";
 import { mockProducts, ProductItem } from "../data/mockData";
 import { isDBConnected } from "../config/db";
+
+const JWT_SECRET = process.env.JWT_SECRET || "gaxinmart_secret_key_secure_afnan_3140";
+
+// Helper function to check if request is from an authenticated admin
+const isAdminRequest = (req: Request): boolean => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) return false;
+    const token = authHeader.split(" ")[1];
+    const decoded: any = jwt.verify(token, JWT_SECRET);
+    return Boolean(decoded && (decoded.role === "admin" || decoded.email));
+  } catch {
+    return false;
+  }
+};
+
+// Helper function to sanitize product for customers (hide buyPrice from public view)
+const sanitizeProduct = (prod: any, isAdmin: boolean) => {
+  const p = prod && prod.toObject ? prod.toObject() : { ...prod };
+  if (!isAdmin) {
+    delete p.buyPrice;
+  }
+  return p;
+};
 
 // Helper function to generate unique slug
 const createSlug = (name: string): string => {
@@ -16,10 +41,11 @@ const createSlug = (name: string): string => {
   );
 };
 
-// GET /api/products (Public)
+// GET /api/products (Public / Admin)
 export const getProducts = async (req: Request, res: Response): Promise<void> => {
   try {
     const { category, search, isOffer, isFeatured, sort, page = 1, limit = 50 } = req.query;
+    const isAdmin = isAdminRequest(req);
 
     if (!isDBConnected()) {
       let filtered = [...mockProducts];
@@ -50,13 +76,15 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
       if (sort === "price_desc") filtered.sort((a, b) => b.sellPrice - a.sellPrice);
       if (sort === "latest") filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
+      const sanitized = filtered.map((p) => sanitizeProduct(p, isAdmin));
+
       res.json({
         success: true,
-        products: filtered,
+        products: sanitized,
         pagination: {
           page: 1,
           limit: Number(limit),
-          total: filtered.length,
+          total: sanitized.length,
           totalPages: 1,
         },
       });
@@ -87,9 +115,11 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
       Product.countDocuments(filter),
     ]);
 
+    const sanitized = products.map((p) => sanitizeProduct(p, isAdmin));
+
     res.json({
       success: true,
-      products,
+      products: sanitized,
       pagination: {
         page: pageNumber,
         limit: pageSize,
@@ -99,10 +129,11 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
     });
   } catch (error: any) {
     console.error("Error fetching products:", error);
-    // Fallback to mock products on any DB error
+    const isAdmin = isAdminRequest(req);
+    const sanitized = mockProducts.map((p) => sanitizeProduct(p, isAdmin));
     res.json({
       success: true,
-      products: mockProducts,
+      products: sanitized,
       pagination: { page: 1, limit: 50, total: mockProducts.length, totalPages: 1 },
     });
   }
@@ -112,6 +143,7 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
 export const getProductByIdOrSlug = async (req: Request, res: Response): Promise<void> => {
   try {
     const identifier = String(req.params.identifier);
+    const isAdmin = isAdminRequest(req);
 
     if (!isDBConnected()) {
       const product = mockProducts.find((p) => p._id === identifier || p.slug === identifier);
@@ -119,14 +151,12 @@ export const getProductByIdOrSlug = async (req: Request, res: Response): Promise
         res.status(404).json({ success: false, message: "Product not found" });
         return;
       }
-      res.json({ success: true, product });
+      res.json({ success: true, product: sanitizeProduct(product, isAdmin) });
       return;
     }
 
-    const isObjectId = identifier.match(/^[0-9a-fA-F]{24}$/);
     let product;
-
-    if (isObjectId) {
+    if (identifier.match(/^[0-9a-fA-F]{24}$/)) {
       product = await Product.findById(identifier);
     } else {
       product = await Product.findOne({ slug: identifier });
@@ -135,18 +165,19 @@ export const getProductByIdOrSlug = async (req: Request, res: Response): Promise
     if (!product) {
       const fallback = mockProducts.find((p) => p._id === identifier || p.slug === identifier);
       if (fallback) {
-        res.json({ success: true, product: fallback });
+        res.json({ success: true, product: sanitizeProduct(fallback, isAdmin) });
         return;
       }
       res.status(404).json({ success: false, message: "Product not found" });
       return;
     }
 
-    res.json({ success: true, product });
+    res.json({ success: true, product: sanitizeProduct(product, isAdmin) });
   } catch (error: any) {
+    const isAdmin = isAdminRequest(req);
     const fallback = mockProducts.find((p) => p._id === req.params.identifier || p.slug === req.params.identifier);
     if (fallback) {
-      res.json({ success: true, product: fallback });
+      res.json({ success: true, product: sanitizeProduct(fallback, isAdmin) });
       return;
     }
     res.status(500).json({ success: false, message: error.message || "Failed to fetch product" });

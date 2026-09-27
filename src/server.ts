@@ -47,7 +47,7 @@ app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 app.get("/health", (req: Request, res: Response) => {
   res.json({
     status: "ok",
-    service: "AuraMart E-Commerce Backend",
+    service: "GAXIN MART E-Commerce Backend",
     timestamp: new Date().toISOString(),
   });
 });
@@ -76,25 +76,34 @@ app.use((err: any, req: Request, res: Response, next: any) => {
 
 // Start Server immediately and connect DB in background
 app.listen(PORT, () => {
-  console.log(`🚀 AuraMart Backend Server running on http://localhost:${PORT}`);
-  const adminEmail = (process.env.ADMIN_EMAIL || "afnan@gmail.com").toLowerCase().trim();
+  console.log(`🚀 GAXIN MART Backend Server running on http://localhost:${PORT}`);
+  const adminEmail = (process.env.ADMIN_EMAIL || "admin@gaxinmart.com").toLowerCase().trim();
   console.log(`🔐 Admin Login configured for: ${adminEmail}`);
 
-  // Connect to DB and seed admin
+  // Connect to DB and seed admin & demo data
   connectDB().then(async () => {
     try {
-      const adminPassword = process.env.ADMIN_PASSWORD || "afnan31403140";
+      const adminPassword = process.env.ADMIN_PASSWORD || "gaxinmart3140";
       const existingAdmin = await Admin.findOne({ email: adminEmail });
 
       if (!existingAdmin) {
         const newAdmin = new Admin({
-          name: "Afnan Johad",
+          name: "GAXIN MART Admin",
           email: adminEmail,
           password: adminPassword,
           role: "admin",
         });
         await newAdmin.save();
         console.log(`👤 Initial Admin account seeded automatically (${adminEmail})`);
+      }
+
+      // Check if products collection is empty in MongoDB; if so, auto-seed products & offers!
+      const { Product } = await import("./models/Product");
+      const prodCount = await Product.countDocuments();
+      if (prodCount === 0) {
+        console.log("🌱 Products collection is empty. Auto-seeding GAXIN MART demo products and offers...");
+        const { seedDatabase } = await import("./seed");
+        await seedDatabase();
       }
     } catch (e) {
       // Ignored if DB offline
