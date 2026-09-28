@@ -17,13 +17,41 @@ import uploadRoutes from "./routes/uploadRoutes";
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Allowed origins for CORS (Live Domain, Vercel Previews, Localhost)
+const allowedOrigins = [
+  "https://www.gaxinmart.shop",
+  "https://gaxinmart.shop",
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "http://127.0.0.1:3000",
+];
+
 // Enable CORS for all frontends (Vercel, custom domain, and localhost)
 app.use(
   cors({
-    origin: true,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, curl, or server-to-server)
+      if (!origin) return callback(null, true);
+
+      if (
+        allowedOrigins.includes(origin) ||
+        origin.endsWith(".vercel.app") ||
+        origin.includes("gaxinmart.shop")
+      ) {
+        return callback(null, true);
+      }
+
+      // Default allow for maximum flexibility
+      return callback(null, true);
+    },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
   })
 );
+
+// Handle preflight across all routes
+app.options("*", cors() as any);
 
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
