@@ -12,9 +12,11 @@ const mongoUri = process.env.MONGODB_URI || "mongodb://localhost:27017/gaxinmart
 
 export const seedDatabase = async () => {
   try {
-    console.log("Connecting to MongoDB for seeding GAXIN MART data...");
-    await mongoose.connect(mongoUri);
-    console.log("✅ Connected to MongoDB.");
+    if (mongoose.connection.readyState !== 1) {
+      console.log("Connecting to MongoDB for seeding GAXIN MART data...");
+      await mongoose.connect(mongoUri);
+      console.log("✅ Connected to MongoDB.");
+    }
 
     // 1. Seed or update Admin
     const adminEmail = (process.env.ADMIN_EMAIL || "admin@gaxinmart.com").toLowerCase().trim();

@@ -40,8 +40,9 @@ export interface IOrder extends Document {
 const OrderItemSchema = new Schema<IOrderItem>(
   {
     product: {
-      type: Schema.Types.ObjectId,
+      type: Schema.Types.Mixed,
       ref: "Product",
+      required: false,
     },
     name: {
       type: String,

@@ -2,22 +2,25 @@ import { Request, Response } from "express";
 import { Offer } from "../models/Offer";
 import { mockOffers, OfferRecord } from "../data/mockData";
 import { isDBConnected } from "../config/db";
+import { uploadStringToCloudinary } from "../config/cloudinary";
 
 // GET /api/offers/active (Public)
 export const getActiveOffers = async (req: Request, res: Response): Promise<void> => {
   try {
-    if (!isDBConnected()) {
-      const banners = mockOffers.filter((o) => o.active && !o.isNoticeTicker);
-      const notices = mockOffers.filter((o) => o.active && o.isNoticeTicker);
-      res.json({ success: true, banners, notices });
-      return;
+    if (isDBConnected()) {
+      const [banners, notices] = await Promise.all([
+        Offer.find({ active: true, isNoticeTicker: false }).sort({ createdAt: -1 }),
+        Offer.find({ active: true, isNoticeTicker: true }).sort({ createdAt: -1 }),
+      ]);
+
+      if (banners.length > 0 || notices.length > 0) {
+        res.json({ success: true, banners, notices });
+        return;
+      }
     }
 
-    const [banners, notices] = await Promise.all([
-      Offer.find({ active: true, isNoticeTicker: false }).sort({ createdAt: -1 }),
-      Offer.find({ active: true, isNoticeTicker: true }).sort({ createdAt: -1 }),
-    ]);
-
+    const banners = mockOffers.filter((o) => o.active && !o.isNoticeTicker);
+    const notices = mockOffers.filter((o) => o.active && o.isNoticeTicker);
     res.json({ success: true, banners, notices });
   } catch (error: any) {
     const banners = mockOffers.filter((o) => o.active && !o.isNoticeTicker);
@@ -29,13 +32,15 @@ export const getActiveOffers = async (req: Request, res: Response): Promise<void
 // GET /api/offers (Admin Only)
 export const getAllOffers = async (req: Request, res: Response): Promise<void> => {
   try {
-    if (!isDBConnected()) {
-      res.json({ success: true, offers: mockOffers });
-      return;
+    if (isDBConnected()) {
+      const offers = await Offer.find().sort({ createdAt: -1 });
+      if (offers.length > 0) {
+        res.json({ success: true, offers });
+        return;
+      }
     }
 
-    const offers = await Offer.find().sort({ createdAt: -1 });
-    res.json({ success: true, offers });
+    res.json({ success: true, offers: mockOffers });
   } catch (error: any) {
     res.json({ success: true, offers: mockOffers });
   }
@@ -61,39 +66,45 @@ export const createOffer = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    if (!isDBConnected()) {
-      const newOffer: OfferRecord = {
-        _id: `offer_${Date.now()}`,
+    let finalBannerImage = bannerImage || "";
+    if (finalBannerImage) {
+      finalBannerImage = await uploadStringToCloudinary(finalBannerImage, "gaxinmart/offers");
+    }
+
+    if (isDBConnected()) {
+      const offer = new Offer({
         title: title || "Special Offer",
         subtitle: subtitle || "",
-        bannerImage: bannerImage || "",
+        bannerImage: finalBannerImage,
         discountPercentage: Number(discountPercentage) || 0,
         badge: badge || "SPECIAL OFFER",
         link: link || "#",
         active: active !== undefined ? Boolean(active) : true,
         isNoticeTicker: Boolean(isNoticeTicker),
         noticeText: noticeText || "",
-        createdAt: new Date(),
-      };
-      mockOffers.unshift(newOffer);
-      res.status(201).json({ success: true, message: "Offer created successfully", offer: newOffer });
+      });
+
+      await offer.save();
+      mockOffers.unshift({ ...offer.toObject(), _id: offer._id.toString() } as any);
+      res.status(201).json({ success: true, message: "Offer created successfully in MongoDB", offer });
       return;
     }
 
-    const offer = new Offer({
+    const newOffer: OfferRecord = {
+      _id: `offer_${Date.now()}`,
       title: title || "Special Offer",
       subtitle: subtitle || "",
-      bannerImage: bannerImage || "",
+      bannerImage: finalBannerImage,
       discountPercentage: Number(discountPercentage) || 0,
       badge: badge || "SPECIAL OFFER",
       link: link || "#",
       active: active !== undefined ? Boolean(active) : true,
       isNoticeTicker: Boolean(isNoticeTicker),
       noticeText: noticeText || "",
-    });
-
-    await offer.save();
-    res.status(201).json({ success: true, message: "Offer created successfully", offer });
+      createdAt: new Date(),
+    };
+    mockOffers.unshift(newOffer);
+    res.status(201).json({ success: true, message: "Offer created successfully (In-Memory)", offer: newOffer });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message || "Failed to create offer" });
   }
@@ -103,22 +114,32 @@ export const createOffer = async (req: Request, res: Response): Promise<void> =>
 export const updateOffer = async (req: Request, res: Response): Promise<void> => {
   try {
     const id = String(req.params.id);
+    const updates = { ...req.body };
 
-    if (!isDBConnected()) {
-      const idx = mockOffers.findIndex((o) => o._id === id);
-      if (idx !== -1) {
-        mockOffers[idx] = { ...mockOffers[idx], ...req.body };
-        res.json({ success: true, message: "Offer updated", offer: mockOffers[idx] });
-        return;
-      }
+    if (updates.bannerImage) {
+      updates.bannerImage = await uploadStringToCloudinary(updates.bannerImage, "gaxinmart/offers");
     }
 
-    const offer = await Offer.findByIdAndUpdate(id, req.body, { new: true });
-    if (!offer) {
+    let updatedMongoOffer = null;
+    if (isDBConnected()) {
+      updatedMongoOffer = await Offer.findByIdAndUpdate(id, updates, { new: true });
+    }
+
+    const idx = mockOffers.findIndex((o) => o._id === id);
+    if (idx !== -1) {
+      mockOffers[idx] = { ...mockOffers[idx], ...updates };
+    }
+
+    if (!updatedMongoOffer && idx === -1) {
       res.status(404).json({ success: false, message: "Offer not found" });
       return;
     }
-    res.json({ success: true, message: "Offer updated successfully", offer });
+
+    res.json({
+      success: true,
+      message: "Offer updated successfully",
+      offer: updatedMongoOffer || (idx !== -1 ? mockOffers[idx] : null),
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message || "Failed to update offer" });
   }
@@ -129,20 +150,15 @@ export const deleteOffer = async (req: Request, res: Response): Promise<void> =>
   try {
     const id = String(req.params.id);
 
-    if (!isDBConnected()) {
-      const idx = mockOffers.findIndex((o) => o._id === id);
-      if (idx !== -1) {
-        mockOffers.splice(idx, 1);
-        res.json({ success: true, message: "Offer deleted successfully" });
-        return;
-      }
+    if (isDBConnected()) {
+      await Offer.findByIdAndDelete(id);
     }
 
-    const offer = await Offer.findByIdAndDelete(id);
-    if (!offer) {
-      res.status(404).json({ success: false, message: "Offer not found" });
-      return;
+    const idx = mockOffers.findIndex((o) => o._id === id);
+    if (idx !== -1) {
+      mockOffers.splice(idx, 1);
     }
+
     res.json({ success: true, message: "Offer deleted successfully" });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message || "Failed to delete offer" });
