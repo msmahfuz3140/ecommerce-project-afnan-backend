@@ -65,6 +65,16 @@ app.get("/health", (req: Request, res: Response) => {
   });
 });
 
+// Auto-connect / ensure DB connection for every API request
+app.use(async (req: Request, res: Response, next: any) => {
+  try {
+    await connectDB();
+  } catch (err) {
+    // continue
+  }
+  next();
+});
+
 // API Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);

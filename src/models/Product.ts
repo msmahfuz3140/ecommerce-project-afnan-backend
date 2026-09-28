@@ -4,17 +4,24 @@ export interface IProduct extends Document {
   name: string;
   slug: string;
   description: string;
-  category: string;
+  category: any;
   subCategory?: string;
   buyPrice: number; // Cost / Purchase price (koto diye kena)
   sellPrice: number; // Selling price (koto diye bikri)
   originalPrice: number; // Crossed out original price for discounts
+  basePrice?: number;
+  costPrice?: number;
+  oldPrice?: number;
   stock: number;
   inStock: boolean;
   images: string[]; // Cloudinary URLs
+  mainImage?: string;
+  galleryImages?: string[];
   isOffer: boolean; // Is part of promotional deal
+  isHotDeal?: boolean;
   offerBadge?: string; // e.g. "20% OFF", "Flash Sale", "Hot Deal"
   isFeatured: boolean;
+  isActive?: boolean;
   specifications: Record<string, string>;
   createdAt: Date;
   updatedAt: Date;
@@ -39,7 +46,7 @@ const ProductSchema = new Schema<IProduct>(
       required: true,
     },
     category: {
-      type: String,
+      type: Schema.Types.Mixed,
       required: true,
       index: true,
     },
@@ -49,25 +56,31 @@ const ProductSchema = new Schema<IProduct>(
     },
     buyPrice: {
       type: Number,
-      required: true,
-      min: 0,
+      default: 0,
+    },
+    costPrice: {
+      type: Number,
       default: 0,
     },
     sellPrice: {
       type: Number,
-      required: true,
-      min: 0,
+      default: 0,
+    },
+    basePrice: {
+      type: Number,
+      default: 0,
     },
     originalPrice: {
       type: Number,
-      required: true,
-      min: 0,
+      default: 0,
+    },
+    oldPrice: {
+      type: Number,
+      default: 0,
     },
     stock: {
       type: Number,
-      required: true,
-      min: 0,
-      default: 100,
+      default: 50,
     },
     inStock: {
       type: Boolean,
@@ -75,13 +88,24 @@ const ProductSchema = new Schema<IProduct>(
     },
     images: {
       type: [String],
-      required: true,
+      default: [],
+    },
+    mainImage: {
+      type: String,
+      default: "",
+    },
+    galleryImages: {
+      type: [String],
       default: [],
     },
     isOffer: {
       type: Boolean,
       default: false,
       index: true,
+    },
+    isHotDeal: {
+      type: Boolean,
+      default: false,
     },
     offerBadge: {
       type: String,
@@ -91,20 +115,24 @@ const ProductSchema = new Schema<IProduct>(
       type: Boolean,
       default: false,
     },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
     specifications: {
-      type: Map,
-      of: String,
+      type: Schema.Types.Mixed,
       default: {},
     },
   },
   {
     timestamps: true,
+    strict: false,
   }
 );
 
 // Auto calculate inStock before saving
-ProductSchema.pre("save", function () {
-  this.inStock = this.stock > 0;
+ProductSchema.pre("save", function (this: any) {
+  this.inStock = (this.stock || 0) > 0;
 });
 
 export const Product = mongoose.model<IProduct>("Product", ProductSchema);

@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { Product } from "../models/Product";
 import { mockProducts, ProductItem } from "../data/mockData";
-import { isDBConnected } from "../config/db";
+import { isDBConnected, ensureDB } from "../config/db";
 import { uploadStringToCloudinary } from "../config/cloudinary";
 
 const JWT_SECRET = process.env.JWT_SECRET || "gaxinmart_jwt_secret_key_2026_secure";
@@ -20,11 +20,45 @@ const isAdminRequest = (req: Request): boolean => {
   }
 };
 
-// Helper function to sanitize product for customers (hide buyPrice from public view)
+// Helper function to sanitize product for customers and normalize Atlas schema fields
 const sanitizeProduct = (prod: any, isAdmin: boolean) => {
   const p = prod && prod.toObject ? prod.toObject() : { ...prod };
+
+  // Normalize sellPrice from basePrice if needed
+  if (p.sellPrice === undefined || p.sellPrice === null || p.sellPrice === 0) {
+    p.sellPrice = p.basePrice || 0;
+  }
+  // Normalize originalPrice from oldPrice if needed
+  if (!p.originalPrice) {
+    p.originalPrice = p.oldPrice || p.sellPrice || 0;
+  }
+  // Normalize buyPrice from costPrice if needed
+  if (p.buyPrice === undefined || p.buyPrice === null) {
+    p.buyPrice = p.costPrice || 0;
+  }
+  // Normalize images from mainImage/galleryImages if needed
+  if (!Array.isArray(p.images) || p.images.length === 0) {
+    p.images = [];
+    if (p.mainImage) p.images.push(p.mainImage);
+    if (Array.isArray(p.galleryImages)) {
+      p.galleryImages.forEach((img: string) => {
+        if (!p.images.includes(img)) p.images.push(img);
+      });
+    }
+    if (p.images.length === 0) {
+      p.images = ["https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80"];
+    }
+  }
+  // Normalize isOffer from isHotDeal
+  if (p.isOffer === undefined) {
+    p.isOffer = Boolean(p.isHotDeal);
+  }
+  // Normalize inStock
+  p.inStock = (p.stock || 0) > 0;
+
   if (!isAdmin) {
     delete p.buyPrice;
+    delete p.costPrice;
   }
   return p;
 };
@@ -46,10 +80,19 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
     const { category, search, isOffer, isFeatured, sort, page = 1, limit = 50 } = req.query;
     const isAdmin = isAdminRequest(req);
 
+    await ensureDB();
+
     if (isDBConnected()) {
       const filter: any = {};
-      if (category && category !== "all") filter.category = category;
-      if (isOffer === "true") filter.isOffer = true;
+      if (category && category !== "all") {
+        filter.$or = [
+          { category: category },
+          { category: new RegExp(String(category), "i") },
+        ];
+      }
+      if (isOffer === "true") {
+        filter.$or = [{ isOffer: true }, { isHotDeal: true }];
+      }
       if (isFeatured === "true") filter.isFeatured = true;
 
       if (search) {
@@ -58,8 +101,8 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
       }
 
       let sortOption: any = { createdAt: -1 };
-      if (sort === "price_asc") sortOption = { sellPrice: 1 };
-      if (sort === "price_desc") sortOption = { sellPrice: -1 };
+      if (sort === "price_asc") sortOption = { sellPrice: 1, basePrice: 1 };
+      if (sort === "price_desc") sortOption = { sellPrice: -1, basePrice: -1 };
       if (sort === "oldest") sortOption = { createdAt: 1 };
 
       const pageNumber = Math.max(1, Number(page));
@@ -209,60 +252,52 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       rawImages.map((img: string) => uploadStringToCloudinary(img, "gaxinmart/products"))
     );
 
-    if (isDBConnected()) {
-      const product = new Product({
-        name: name.trim(),
-        slug,
-        description: description || name,
-        category,
-        subCategory: subCategory || "",
-        buyPrice: Number(buyPrice) || 0,
-        sellPrice: Number(sellPrice),
-        originalPrice: Number(originalPrice) || Number(sellPrice),
-        stock: Number(stock) || 50,
-        images: finalImages,
-        isOffer: Boolean(isOffer),
-        offerBadge: offerBadge || "",
-        isFeatured: Boolean(isFeatured),
-        specifications: specifications || {},
-      });
-
-      await product.save();
-      mockProducts.unshift({ ...product.toObject(), _id: product._id.toString() } as any);
-
-      res.status(201).json({
-        success: true,
-        message: "Product created successfully in MongoDB",
-        product,
+    const connected = await ensureDB();
+    if (!connected) {
+      res.status(503).json({
+        success: false,
+        message: "MongoDB connection is offline. Please check MONGODB_URI in your .env or network connection to MongoDB Atlas.",
       });
       return;
     }
 
-    const newProduct: ProductItem = {
-      _id: `prod_${Date.now()}`,
+    const numSellPrice = Number(sellPrice) || 0;
+    const numOriginalPrice = Number(originalPrice) || numSellPrice;
+    const numBuyPrice = Number(buyPrice) || 0;
+    const numStock = Number(stock) || 50;
+
+    const product = new Product({
       name: name.trim(),
       slug,
       description: description || name,
       category,
       subCategory: subCategory || "",
-      buyPrice: Number(buyPrice) || 0,
-      sellPrice: Number(sellPrice),
-      originalPrice: Number(originalPrice) || Number(sellPrice),
-      stock: Number(stock) || 50,
-      inStock: (Number(stock) || 50) > 0,
+      buyPrice: numBuyPrice,
+      costPrice: numBuyPrice,
+      sellPrice: numSellPrice,
+      basePrice: numSellPrice,
+      originalPrice: numOriginalPrice,
+      oldPrice: numOriginalPrice,
+      stock: numStock,
+      inStock: numStock > 0,
       images: finalImages,
+      mainImage: finalImages[0] || "",
+      galleryImages: finalImages,
       isOffer: Boolean(isOffer),
+      isHotDeal: Boolean(isOffer),
       offerBadge: offerBadge || "",
       isFeatured: Boolean(isFeatured),
+      isActive: true,
       specifications: specifications || {},
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    mockProducts.unshift(newProduct);
+    });
+
+    await product.save();
+    mockProducts.unshift({ ...product.toObject(), _id: product._id.toString() } as any);
+
     res.status(201).json({
       success: true,
-      message: "Product created successfully (In-Memory Store)",
-      product: newProduct,
+      message: "Product created successfully in MongoDB",
+      product: sanitizeProduct(product, true),
     });
   } catch (error: any) {
     console.error("Error creating product:", error);
@@ -281,7 +316,24 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
       updates.images = await Promise.all(
         updates.images.map((img: string) => uploadStringToCloudinary(img, "gaxinmart/products"))
       );
+      updates.mainImage = updates.images[0] || "";
+      updates.galleryImages = updates.images;
     }
+
+    if (updates.sellPrice !== undefined) {
+      updates.basePrice = Number(updates.sellPrice);
+    }
+    if (updates.originalPrice !== undefined) {
+      updates.oldPrice = Number(updates.originalPrice);
+    }
+    if (updates.buyPrice !== undefined) {
+      updates.costPrice = Number(updates.buyPrice);
+    }
+    if (updates.isOffer !== undefined) {
+      updates.isHotDeal = Boolean(updates.isOffer);
+    }
+
+    await ensureDB();
 
     let updatedMongoProduct = null;
     if (isDBConnected()) {
@@ -301,7 +353,7 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
     res.json({
       success: true,
       message: "Product updated successfully",
-      product: updatedMongoProduct || mockProducts[idx],
+      product: sanitizeProduct(updatedMongoProduct || mockProducts[idx], true),
     });
   } catch (error: any) {
     console.error("Error updating product:", error);
@@ -314,6 +366,8 @@ export const deleteProduct = async (req: Request, res: Response): Promise<void> 
   try {
     const id = String(req.params.id);
 
+    await ensureDB();
+
     if (isDBConnected()) {
       await Product.findByIdAndDelete(id);
     }
@@ -323,9 +377,10 @@ export const deleteProduct = async (req: Request, res: Response): Promise<void> 
       mockProducts.splice(idx, 1);
     }
 
-    res.json({ success: true, message: "Product deleted successfully" });
+    res.json({ success: true, message: "Product deleted successfully from MongoDB" });
   } catch (error: any) {
     console.error("Error deleting product:", error);
     res.status(500).json({ success: false, message: error.message || "Failed to delete product" });
   }
 };
+

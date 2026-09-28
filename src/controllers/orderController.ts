@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { Order, OrderStatus } from "../models/Order";
 import { Product } from "../models/Product";
 import { mockOrders, mockProducts, OrderRecord } from "../data/mockData";
-import { isDBConnected } from "../config/db";
+import { isDBConnected, ensureDB } from "../config/db";
 
 const generateOrderId = (): string => {
   const randomDigits = Math.floor(100000 + Math.random() * 900000);
@@ -23,6 +23,8 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       res.status(400).json({ success: false, message: "Order must contain at least one item" });
       return;
     }
+
+    await ensureDB();
 
     let calculatedSubtotal = 0;
     let calculatedBuyCost = 0;
@@ -54,8 +56,8 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         };
       }
 
-      const itemSellPrice = product.sellPrice;
-      const itemBuyPrice = product.buyPrice || 0;
+      const itemSellPrice = product.sellPrice || product.basePrice || 0;
+      const itemBuyPrice = product.buyPrice || product.costPrice || 0;
       const itemSubtotal = itemSellPrice * quantity;
       const itemProfit = (itemSellPrice - itemBuyPrice) * quantity;
 
@@ -65,7 +67,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       verifiedItems.push({
         product: product._id,
         name: product.name,
-        image: product.images[0] || "",
+        image: product.images?.[0] || product.mainImage || "",
         quantity,
         buyPrice: itemBuyPrice,
         sellPrice: itemSellPrice,
@@ -105,27 +107,28 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       updatedAt: new Date(),
     };
 
-    if (!isDBConnected()) {
-      const savedMockOrder: OrderRecord = {
-        _id: `ord_${Date.now()}`,
-        ...orderData,
-      };
-      mockOrders.unshift(savedMockOrder);
+    if (isDBConnected()) {
+      const order = new Order(orderData);
+      await order.save();
+      mockOrders.unshift({ ...order.toObject(), _id: order._id.toString() } as any);
+
       res.status(201).json({
         success: true,
         message: "Order placed successfully! We will contact you soon.",
-        order: savedMockOrder,
+        order,
       });
       return;
     }
 
-    const order = new Order(orderData);
-    await order.save();
-
+    const savedMockOrder: OrderRecord = {
+      _id: `ord_${Date.now()}`,
+      ...orderData,
+    };
+    mockOrders.unshift(savedMockOrder);
     res.status(201).json({
       success: true,
       message: "Order placed successfully! We will contact you soon.",
-      order,
+      order: savedMockOrder,
     });
   } catch (error: any) {
     console.error("Error creating order:", error);
