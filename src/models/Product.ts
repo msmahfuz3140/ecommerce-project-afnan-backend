@@ -20,6 +20,7 @@ export interface IProduct extends Document {
   isOffer: boolean; // Is part of promotional deal
   isHotDeal?: boolean;
   offerBadge?: string; // e.g. "20% OFF", "Flash Sale", "Hot Deal"
+  offerEndTime?: Date; // Expiry timestamp for the offer
   isFeatured: boolean;
   isActive?: boolean;
   specifications: Record<string, string>;
@@ -110,6 +111,9 @@ const ProductSchema = new Schema<IProduct>(
     offerBadge: {
       type: String,
       default: "",
+    },
+    offerEndTime: {
+      type: Date,
     },
     isFeatured: {
       type: Boolean,

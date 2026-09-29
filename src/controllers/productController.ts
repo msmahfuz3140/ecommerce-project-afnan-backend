@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
 import { Product } from "../models/Product";
 import { mockProducts, ProductItem } from "../data/mockData";
 import { isDBConnected, ensureDB } from "../config/db";
@@ -53,6 +54,17 @@ const sanitizeProduct = (prod: any, isAdmin: boolean) => {
   if (p.isOffer === undefined) {
     p.isOffer = Boolean(p.isHotDeal);
   }
+
+  // Automatic real-time offer expiry check
+  if (p.isOffer && p.offerEndTime) {
+    const expiryTime = new Date(p.offerEndTime).getTime();
+    if (!isNaN(expiryTime) && expiryTime <= Date.now()) {
+      p.isOffer = false;
+      p.isHotDeal = false;
+      p.offerExpired = true;
+    }
+  }
+
   // Normalize inStock
   p.inStock = (p.stock || 0) > 0;
 
@@ -188,11 +200,14 @@ export const getProductByIdOrSlug = async (req: Request, res: Response): Promise
     const identifier = String(req.params.identifier);
     const isAdmin = isAdminRequest(req);
 
+    await ensureDB();
+
     if (isDBConnected()) {
       let product: any = null;
-      if (identifier.match(/^[0-9a-fA-F]{24}$/)) {
+      if (mongoose.Types.ObjectId.isValid(identifier)) {
         product = await Product.findById(identifier);
-      } else {
+      }
+      if (!product) {
         product = await Product.findOne({ slug: identifier });
       }
 
@@ -235,6 +250,7 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       images,
       isOffer,
       offerBadge,
+      offerEndTime,
       isFeatured,
       specifications,
     } = req.body;
@@ -266,6 +282,8 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
     const numBuyPrice = Number(buyPrice) || 0;
     const numStock = Number(stock) || 50;
 
+    const parsedOfferEnd = offerEndTime ? new Date(offerEndTime) : undefined;
+
     const product = new Product({
       name: name.trim(),
       slug,
@@ -286,6 +304,7 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       isOffer: Boolean(isOffer),
       isHotDeal: Boolean(isOffer),
       offerBadge: offerBadge || "",
+      offerEndTime: parsedOfferEnd,
       isFeatured: Boolean(isFeatured),
       isActive: true,
       specifications: specifications || {},
@@ -331,16 +350,29 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
     }
     if (updates.isOffer !== undefined) {
       updates.isHotDeal = Boolean(updates.isOffer);
+      if (!updates.isOffer) {
+        updates.offerEndTime = null;
+      }
+    }
+    if (updates.offerEndTime) {
+      updates.offerEndTime = new Date(updates.offerEndTime);
+    } else if (updates.offerEndTime === "" || updates.offerEndTime === null) {
+      updates.offerEndTime = null;
     }
 
     await ensureDB();
 
     let updatedMongoProduct = null;
     if (isDBConnected()) {
-      updatedMongoProduct = await Product.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
+      if (mongoose.Types.ObjectId.isValid(id)) {
+        updatedMongoProduct = await Product.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
+      }
+      if (!updatedMongoProduct) {
+        updatedMongoProduct = await Product.findOneAndUpdate({ slug: id }, updates, { new: true, runValidators: true });
+      }
     }
 
-    const idx = mockProducts.findIndex((p) => p._id === id);
+    const idx = mockProducts.findIndex((p) => p._id === id || p.slug === id);
     if (idx !== -1) {
       mockProducts[idx] = { ...mockProducts[idx], ...updates, updatedAt: new Date() };
     }
@@ -369,10 +401,20 @@ export const deleteProduct = async (req: Request, res: Response): Promise<void> 
     await ensureDB();
 
     if (isDBConnected()) {
-      await Product.findByIdAndDelete(id);
+      let deleted = null;
+      if (mongoose.Types.ObjectId.isValid(id)) {
+        deleted = await Product.findByIdAndDelete(id);
+      }
+      if (!deleted) {
+        deleted = await Product.findOneAndDelete({ slug: id });
+      }
+      if (!deleted) {
+        deleted = await Product.findOneAndDelete({ name: id });
+      }
+      console.log(`Deleted product ${id} from MongoDB:`, deleted ? "Success" : "Not found");
     }
 
-    const idx = mockProducts.findIndex((p) => p._id === id);
+    const idx = mockProducts.findIndex((p) => p._id === id || p.slug === id || p.name === id);
     if (idx !== -1) {
       mockProducts.splice(idx, 1);
     }
@@ -383,4 +425,5 @@ export const deleteProduct = async (req: Request, res: Response): Promise<void> 
     res.status(500).json({ success: false, message: error.message || "Failed to delete product" });
   }
 };
+
 

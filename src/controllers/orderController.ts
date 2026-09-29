@@ -76,7 +76,20 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       });
     }
 
-    const deliveryCharge = city.toLowerCase().includes("outside") ? 130 : 70;
+    // Dynamic 3-Zone Delivery Charge: Dhaka, Near Dhaka, Outside Dhaka
+    let deliveryCharge = 70;
+    const lowerCity = (city || "").toLowerCase();
+
+    if (req.body.deliveryCharge !== undefined && Number(req.body.deliveryCharge) >= 0) {
+      deliveryCharge = Number(req.body.deliveryCharge);
+    } else if (lowerCity.includes("near") || lowerCity.includes("আশেপাশে") || lowerCity.includes("sub") || lowerCity.includes("savar") || lowerCity.includes("gazipur")) {
+      deliveryCharge = 100;
+    } else if (lowerCity.includes("outside") || lowerCity.includes("বাইরে")) {
+      deliveryCharge = 130;
+    } else {
+      deliveryCharge = 70;
+    }
+
     const totalAmount = calculatedSubtotal + deliveryCharge;
     const totalProfit = calculatedSubtotal - calculatedBuyCost;
     const orderId = generateOrderId();

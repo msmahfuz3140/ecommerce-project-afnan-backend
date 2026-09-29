@@ -15,7 +15,7 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
     }
 
     const normalizedEmail = email.toLowerCase().trim();
-    const defaultAdminEmail = (process.env.ADMIN_EMAIL || "admin@gaxinmart.com").toLowerCase().trim();
+    const defaultAdminEmail = (process.env.ADMIN_EMAIL || "gaxinmart@gmail.com").toLowerCase().trim();
     const defaultAdminPassword = process.env.ADMIN_PASSWORD || "gaxinmart3140";
 
     // 1. If DB is connected, verify against MongoDB first so changed credentials immediately work!
@@ -50,8 +50,8 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
     // 2. Default credentials check for initial setup or fallback
     const isDirectMatch =
       (normalizedEmail === defaultAdminEmail && password === defaultAdminPassword) ||
-      (normalizedEmail === "admin@gaxinmart.com" && password === "gaxinmart3140") ||
-      (normalizedEmail === "afnan@gmail.com" && password === "afnan31403140");
+      (normalizedEmail === "gaxinmart@gmail.com" && password === "gaxinmart3140") ||
+      (normalizedEmail === "admin@gaxinmart.com" && password === "gaxinmart3140");
 
     if (isDirectMatch) {
       const token = jwt.sign(

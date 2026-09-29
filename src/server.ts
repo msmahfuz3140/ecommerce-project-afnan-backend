@@ -13,6 +13,7 @@ import orderRoutes from "./routes/orderRoutes";
 import offerRoutes from "./routes/offerRoutes";
 import analyticsRoutes from "./routes/analyticsRoutes";
 import uploadRoutes from "./routes/uploadRoutes";
+import settingRoutes from "./routes/settingRoutes";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -82,6 +83,7 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/offers", offerRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/upload", uploadRoutes);
+app.use("/api/settings", settingRoutes);
 
 // 404 Handler
 app.use((req: Request, res: Response) => {
@@ -100,25 +102,36 @@ app.use((err: any, req: Request, res: Response, next: any) => {
 // Start Server immediately and connect DB in background
 app.listen(PORT, () => {
   console.log(`🚀 GAXIN MART Backend Server running on http://localhost:${PORT}`);
-  const adminEmail = (process.env.ADMIN_EMAIL || "admin@gaxinmart.com").toLowerCase().trim();
+  const adminEmail = (process.env.ADMIN_EMAIL || "gaxinmart@gmail.com").toLowerCase().trim();
   console.log(`🔐 Admin Login configured for: ${adminEmail}`);
 
   // Connect to DB and seed admin & demo data
   connectDB().then(async () => {
     try {
       const adminPassword = process.env.ADMIN_PASSWORD || "gaxinmart3140";
-      const existingAdmin = await Admin.findOne({ email: adminEmail });
+      let existingAdmin = await Admin.findOne({ email: adminEmail });
 
       if (!existingAdmin) {
-        const newAdmin = new Admin({
-          name: "GAXIN MART Admin",
-          email: adminEmail,
-          password: adminPassword,
-          role: "admin",
-        });
-        await newAdmin.save();
-        console.log(`👤 Initial Admin account seeded automatically (${adminEmail})`);
+        // Also check if an older admin exists to update
+        const oldAdmin = await Admin.findOne();
+        if (oldAdmin) {
+          oldAdmin.email = adminEmail;
+          oldAdmin.password = adminPassword;
+          oldAdmin.name = "GAXIN MART Admin";
+          await oldAdmin.save();
+          console.log(`👤 Admin account updated to ${adminEmail}`);
+        } else {
+          const newAdmin = new Admin({
+            name: "GAXIN MART Admin",
+            email: adminEmail,
+            password: adminPassword,
+            role: "admin",
+          });
+          await newAdmin.save();
+          console.log(`👤 Initial Admin account seeded automatically (${adminEmail})`);
+        }
       }
+
 
       // Check if products collection is empty in MongoDB; if so, auto-seed products & offers!
       const { Product } = await import("./models/Product");
