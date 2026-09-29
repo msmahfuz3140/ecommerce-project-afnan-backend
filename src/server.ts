@@ -51,9 +51,7 @@ app.use(
   })
 );
 
-// Handle preflight across all routes
-app.options("*", cors() as any);
-
+// Express middleware
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
@@ -99,50 +97,60 @@ app.use((err: any, req: Request, res: Response, next: any) => {
   });
 });
 
-// Start Server immediately and connect DB in background
-app.listen(PORT, () => {
-  console.log(`🚀 GAXIN MART Backend Server running on http://localhost:${PORT}`);
-  const adminEmail = (process.env.ADMIN_EMAIL || "gaxinmart@gmail.com").toLowerCase().trim();
-  console.log(`🔐 Admin Login configured for: ${adminEmail}`);
+const initAdminAndSeed = async () => {
+  try {
+    const adminEmail = (process.env.ADMIN_EMAIL || "gaxinmart@gmail.com").toLowerCase().trim();
+    const adminPassword = process.env.ADMIN_PASSWORD || "gaxinmart3140";
+    let existingAdmin = await Admin.findOne({ email: adminEmail });
 
-  // Connect to DB and seed admin & demo data
-  connectDB().then(async () => {
-    try {
-      const adminPassword = process.env.ADMIN_PASSWORD || "gaxinmart3140";
-      let existingAdmin = await Admin.findOne({ email: adminEmail });
-
-      if (!existingAdmin) {
-        // Also check if an older admin exists to update
-        const oldAdmin = await Admin.findOne();
-        if (oldAdmin) {
-          oldAdmin.email = adminEmail;
-          oldAdmin.password = adminPassword;
-          oldAdmin.name = "GAXIN MART Admin";
-          await oldAdmin.save();
-          console.log(`👤 Admin account updated to ${adminEmail}`);
-        } else {
-          const newAdmin = new Admin({
-            name: "GAXIN MART Admin",
-            email: adminEmail,
-            password: adminPassword,
-            role: "admin",
-          });
-          await newAdmin.save();
-          console.log(`👤 Initial Admin account seeded automatically (${adminEmail})`);
-        }
+    if (!existingAdmin) {
+      const oldAdmin = await Admin.findOne();
+      if (oldAdmin) {
+        oldAdmin.email = adminEmail;
+        oldAdmin.password = adminPassword;
+        oldAdmin.name = "GAXIN MART Admin";
+        await oldAdmin.save();
+        console.log(`👤 Admin account updated to ${adminEmail}`);
+      } else {
+        const newAdmin = new Admin({
+          name: "GAXIN MART Admin",
+          email: adminEmail,
+          password: adminPassword,
+          role: "admin",
+        });
+        await newAdmin.save();
+        console.log(`👤 Initial Admin account seeded automatically (${adminEmail})`);
       }
-
-
-      // Check if products collection is empty in MongoDB; if so, auto-seed products & offers!
-      const { Product } = await import("./models/Product");
-      const prodCount = await Product.countDocuments();
-      if (prodCount === 0) {
-        console.log("🌱 Products collection is empty. Auto-seeding GAXIN MART demo products and offers...");
-        const { seedDatabase } = await import("./seed");
-        await seedDatabase();
-      }
-    } catch (e) {
-      // Ignored if DB offline
     }
+
+    const { Product } = await import("./models/Product");
+    const prodCount = await Product.countDocuments();
+    if (prodCount === 0) {
+      console.log("🌱 Products collection is empty. Auto-seeding GAXIN MART demo products and offers...");
+      const { seedDatabase } = await import("./seed");
+      await seedDatabase();
+    }
+  } catch (e) {
+    // Ignored if DB offline
+  }
+};
+
+// Start Server locally or when not running in Vercel Serverless environment
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`🚀 GAXIN MART Backend Server running on http://localhost:${PORT}`);
+    const adminEmail = (process.env.ADMIN_EMAIL || "gaxinmart@gmail.com").toLowerCase().trim();
+    console.log(`🔐 Admin Login configured for: ${adminEmail}`);
+
+    connectDB().then(() => {
+      initAdminAndSeed();
+    });
   });
-});
+} else {
+  // On Vercel, connect DB and seed in background on initial cold start
+  connectDB().then(() => {
+    initAdminAndSeed();
+  });
+}
+
+export default app;
