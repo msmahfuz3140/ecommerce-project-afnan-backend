@@ -96,6 +96,7 @@ const createSlug = (name: string): string => {
 
 // GET /api/products (Public / Admin)
 export const getProducts = async (req: Request, res: Response): Promise<void> => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   try {
     const { category, search, isOffer, isFeatured, sort, page = 1, limit = 100 } = req.query;
     const isAdmin = isAdminRequest(req);
@@ -260,6 +261,7 @@ export const getProductByIdOrSlug = async (req: Request, res: Response): Promise
 
 // POST /api/products (Admin Only)
 export const createProduct = async (req: Request, res: Response): Promise<void> => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   try {
     const {
       name,
@@ -358,6 +360,7 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
 
 // PUT /api/products/:id (Admin Only)
 export const updateProduct = async (req: Request, res: Response): Promise<void> => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   try {
     const id = String(req.params.id || "").trim();
     const updates = { ...req.body };
@@ -455,6 +458,7 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
 
 // DELETE /api/products/:id (Admin Only)
 export const deleteProduct = async (req: Request, res: Response): Promise<void> => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   try {
     const id = String(req.params.id || "").trim();
     if (!id) {
