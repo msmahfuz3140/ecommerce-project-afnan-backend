@@ -466,13 +466,19 @@ export const deleteProduct = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    await ensureDB();
+    const connected = await ensureDB();
+    if (!connected || !isDBConnected()) {
+      res.status(503).json({
+        success: false,
+        message: "MongoDB ডাটাবেজের সাথে সংযোগ স্থাপন করা সম্ভব হয়নি। পণ্য ডিলিট করা যায়নি।",
+      });
+      return;
+    }
 
     let deleted: any = null;
-    if (isDBConnected()) {
-      if (mongoose.Types.ObjectId.isValid(id)) {
-        deleted = await Product.findByIdAndDelete(id);
-      }
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      deleted = await Product.findByIdAndDelete(id);
+    }
       if (!deleted) {
         deleted = await Product.findOneAndDelete({ _id: id });
       }
@@ -494,7 +500,6 @@ export const deleteProduct = async (req: Request, res: Response): Promise<void> 
         }
       }
       console.log(`Deleted product ${id} from MongoDB:`, deleted ? "Success" : "Not found in DB");
-    }
 
     // Always remove from in-memory mockProducts as well
     const idx = mockProducts.findIndex(

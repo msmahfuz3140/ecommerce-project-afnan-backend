@@ -122,14 +122,6 @@ const initAdminAndSeed = async () => {
         console.log(`👤 Initial Admin account seeded automatically (${adminEmail})`);
       }
     }
-
-    const { Product } = await import("./models/Product");
-    const prodCount = await Product.countDocuments();
-    if (prodCount === 0) {
-      console.log("🌱 Products collection is empty. Auto-seeding GAXIN MART demo products and offers...");
-      const { seedDatabase } = await import("./seed");
-      await seedDatabase();
-    }
   } catch (e) {
     // Ignored if DB offline
   }
