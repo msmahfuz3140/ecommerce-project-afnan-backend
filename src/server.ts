@@ -47,7 +47,16 @@ app.use(
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+      "Cache-Control",
+      "Pragma",
+      "Expires",
+      "Origin",
+    ],
   })
 );
 
@@ -56,10 +65,30 @@ app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
 // Health Check
-app.get("/health", (req: Request, res: Response) => {
+app.get("/health", async (req: Request, res: Response) => {
+  const { isDBConnected, connectDB } = await import("./config/db");
+  const mongoose = (await import("mongoose")).default;
+  const { Product } = await import("./models/Product");
+
+  await connectDB();
+  const dbOk = isDBConnected();
+  let count = 0;
+  if (dbOk) {
+    try {
+      count = await Product.countDocuments();
+    } catch (e: any) {
+      count = -1;
+    }
+  }
+
   res.json({
     status: "ok",
     service: "GAXIN MART E-Commerce Backend",
+    dbConnected: dbOk,
+    readyState: mongoose.connection.readyState,
+    dbName: mongoose.connection.name,
+    dbHost: mongoose.connection.host,
+    productsCount: count,
     timestamp: new Date().toISOString(),
   });
 });

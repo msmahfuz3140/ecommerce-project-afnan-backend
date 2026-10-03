@@ -90,7 +90,7 @@ export const uploadStringToCloudinary = async (
   try {
     const result = await cloudinary.uploader.upload(imageStr, {
       folder,
-      resource_type: "image",
+      resource_type: "auto",
     });
     return result.secure_url;
   } catch (err: any) {

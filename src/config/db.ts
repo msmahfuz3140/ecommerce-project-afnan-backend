@@ -71,6 +71,13 @@ export const connectDB = async (): Promise<boolean> => {
       });
       cached.conn = mongoose;
       console.log(`✅ MongoDB connected successfully to database: ${mongoose.connection.name}`);
+      try {
+        await mongoose.connection.db?.collection("products").createIndex({ createdAt: -1 });
+        await mongoose.connection.db?.collection("products").createIndex({ category: 1, createdAt: -1 });
+        await mongoose.connection.db?.collection("products").createIndex({ sellPrice: 1 });
+      } catch (e) {
+        // index creation check
+      }
       return true;
     } catch (error: any) {
       cached.promise = null;

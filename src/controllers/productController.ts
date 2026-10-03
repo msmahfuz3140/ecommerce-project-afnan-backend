@@ -146,7 +146,7 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
       const skip = (pageNumber - 1) * pageSize;
 
       const [products, total] = await Promise.all([
-        Product.find(filter).sort(sortOption).skip(skip).limit(pageSize),
+        Product.find(filter).sort(sortOption).allowDiskUse(true).skip(skip).limit(pageSize),
         Product.countDocuments(filter),
       ]);
 
@@ -415,9 +415,6 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
         updatedMongoProduct = await Product.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
       }
       if (!updatedMongoProduct) {
-        updatedMongoProduct = await Product.findOneAndUpdate({ _id: id }, updates, { new: true, runValidators: true });
-      }
-      if (!updatedMongoProduct) {
         updatedMongoProduct = await Product.findOneAndUpdate({ slug: id }, updates, { new: true, runValidators: true });
       }
       if (!updatedMongoProduct) {
@@ -479,27 +476,24 @@ export const deleteProduct = async (req: Request, res: Response): Promise<void> 
     if (mongoose.Types.ObjectId.isValid(id)) {
       deleted = await Product.findByIdAndDelete(id);
     }
-      if (!deleted) {
-        deleted = await Product.findOneAndDelete({ _id: id });
+    if (!deleted) {
+      deleted = await Product.findOneAndDelete({ slug: id });
+    }
+    if (!deleted) {
+      deleted = await Product.findOneAndDelete({ name: id });
+    }
+    if (!deleted) {
+      // If cleanId matches a mock ID, find by its slug or name in MongoDB
+      const mockItem = mockProducts.find(
+        (p) => p._id === id || p.slug === id || p.name === id
+      );
+      if (mockItem) {
+        deleted = await Product.findOneAndDelete({
+          $or: [{ slug: mockItem.slug }, { name: mockItem.name }],
+        });
       }
-      if (!deleted) {
-        deleted = await Product.findOneAndDelete({ slug: id });
-      }
-      if (!deleted) {
-        deleted = await Product.findOneAndDelete({ name: id });
-      }
-      if (!deleted) {
-        // If cleanId matches a mock ID, find by its slug or name in MongoDB
-        const mockItem = mockProducts.find(
-          (p) => p._id === id || p.slug === id || p.name === id
-        );
-        if (mockItem) {
-          deleted = await Product.findOneAndDelete({
-            $or: [{ slug: mockItem.slug }, { name: mockItem.name }],
-          });
-        }
-      }
-      console.log(`Deleted product ${id} from MongoDB:`, deleted ? "Success" : "Not found in DB");
+    }
+    console.log(`Deleted product ${id} from MongoDB:`, deleted ? "Success" : "Not found in DB");
 
     // Always remove from in-memory mockProducts as well
     const idx = mockProducts.findIndex(
