@@ -38,15 +38,15 @@ export const isDBConnected = (): boolean => {
 
 // Event listeners for connection monitoring
 mongoose.connection.on("connected", () => {
-  console.log("✅ MongoDB Connection Established Successfully");
+  console.log("✅ Cloud Database Connection Established Successfully");
 });
 
 mongoose.connection.on("error", (err: any) => {
-  console.error("❌ MongoDB Connection Error:", err.message || err);
+  console.error("❌ Cloud Database Connection Error:", err.message || err);
 });
 
 mongoose.connection.on("disconnected", () => {
-  console.warn("⚠️ MongoDB Disconnected. Awaiting reconnection...");
+  console.warn("⚠️ Cloud Database Disconnected. Awaiting reconnection...");
 });
 
 export const connectDB = async (): Promise<boolean> => {
@@ -63,25 +63,52 @@ export const connectDB = async (): Promise<boolean> => {
 
   cached.promise = (async () => {
     try {
-      console.log(`📡 Connecting to MongoDB Atlas: ${mongoUri.split("@").pop()?.split("?")[0] || "database"}...`);
+      console.log("📡 Connecting to Enterprise Cloud Database...");
       await mongoose.connect(mongoUri, {
         serverSelectionTimeoutMS: 10000,
         connectTimeoutMS: 10000,
         autoIndex: false,
       });
       cached.conn = mongoose;
-      console.log(`✅ MongoDB connected successfully to database: ${mongoose.connection.name}`);
+      console.log(`✅ Cloud Database connected successfully.`);
+
+      // Ensure high-performance compound indexes across all collections
       try {
-        await mongoose.connection.db?.collection("products").createIndex({ createdAt: -1 });
-        await mongoose.connection.db?.collection("products").createIndex({ category: 1, createdAt: -1 });
-        await mongoose.connection.db?.collection("products").createIndex({ sellPrice: 1 });
+        const db = mongoose.connection.db;
+        if (db) {
+          await Promise.allSettled([
+            // Products
+            db.collection("products").createIndex({ createdAt: -1 }),
+            db.collection("products").createIndex({ category: 1, createdAt: -1 }),
+            db.collection("products").createIndex({ sellPrice: 1 }),
+            db.collection("products").createIndex({ isOffer: 1, createdAt: -1 }),
+            db.collection("products").createIndex({ isFeatured: 1, createdAt: -1 }),
+            db.collection("products").createIndex({ slug: 1 }),
+
+            // Orders
+            db.collection("orders").createIndex({ createdAt: -1 }),
+            db.collection("orders").createIndex({ status: 1, createdAt: -1 }),
+            db.collection("orders").createIndex({ createdAt: 1, status: 1 }),
+            db.collection("orders").createIndex({ orderId: 1 }),
+            db.collection("orders").createIndex({ phone: 1 }),
+            db.collection("orders").createIndex({ "items.product": 1 }),
+
+            // Offers
+            db.collection("offers").createIndex({ active: 1, isNoticeTicker: 1, createdAt: -1 }),
+            db.collection("offers").createIndex({ createdAt: -1 }),
+
+            // Settings & Admin
+            db.collection("settings").createIndex({ key: 1 }),
+            db.collection("admins").createIndex({ email: 1 }),
+          ]);
+        }
       } catch (e) {
-        // index creation check
+        // index creation error ignored
       }
       return true;
     } catch (error: any) {
       cached.promise = null;
-      console.error(`❌ MongoDB connection attempt failed: ${error.message || error}`);
+      console.error(`❌ Cloud Database connection attempt failed: ${error.message || error}`);
       return false;
     }
   })();

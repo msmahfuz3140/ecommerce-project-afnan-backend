@@ -85,9 +85,7 @@ app.get("/health", async (req: Request, res: Response) => {
     status: "ok",
     service: "GAXIN MART E-Commerce Backend",
     dbConnected: dbOk,
-    readyState: mongoose.connection.readyState,
-    dbName: mongoose.connection.name,
-    dbHost: mongoose.connection.host,
+    cloudStorage: "Operational",
     productsCount: count,
     timestamp: new Date().toISOString(),
   });

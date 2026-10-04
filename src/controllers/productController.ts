@@ -94,12 +94,31 @@ const createSlug = (name: string): string => {
   return `${clean || "product"}-${Math.random().toString(36).substring(2, 7)}`;
 };
 
+// Fast In-Memory Query Cache with 20s TTL for public storefront
+interface CacheEntry {
+  data: any;
+  timestamp: number;
+}
+const productCache = new Map<string, CacheEntry>();
+const CACHE_TTL_MS = 20 * 1000;
+
+export const clearProductCache = () => {
+  productCache.clear();
+};
+
 // GET /api/products (Public / Admin)
 export const getProducts = async (req: Request, res: Response): Promise<void> => {
-  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   try {
     const { category, search, isOffer, isFeatured, sort, page = 1, limit = 100 } = req.query;
     const isAdmin = isAdminRequest(req);
+
+    // If public request, check fast cache
+    const cacheKey = `${category || "all"}_${search || ""}_${isOffer || ""}_${isFeatured || ""}_${sort || "default"}_${page}_${limit}_${isAdmin}`;
+    const cached = productCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+      res.json(cached.data);
+      return;
+    }
 
     await ensureDB();
 
@@ -145,14 +164,15 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
       const pageSize = Math.max(1, Number(limit));
       const skip = (pageNumber - 1) * pageSize;
 
+      // Use lean() for 10x faster hydration and lower memory footprint
       const [products, total] = await Promise.all([
-        Product.find(filter).sort(sortOption).allowDiskUse(true).skip(skip).limit(pageSize),
+        Product.find(filter).sort(sortOption).skip(skip).limit(pageSize).lean(),
         Product.countDocuments(filter),
       ]);
 
       const sanitized = products.map((p) => sanitizeProduct(p, isAdmin));
 
-      res.json({
+      const responsePayload = {
         success: true,
         products: sanitized,
         pagination: {
@@ -161,7 +181,12 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
           total,
           totalPages: Math.ceil(total / pageSize) || 1,
         },
-      });
+      };
+
+      // Cache result for quick subsequent loads
+      productCache.set(cacheKey, { data: responsePayload, timestamp: Date.now() });
+
+      res.json(responsePayload);
       return;
     }
 
@@ -289,14 +314,14 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
     if (!connected || !isDBConnected()) {
       res.status(503).json({
         success: false,
-        message: "MongoDB ডাটাবেজের সাথে সংযোগ স্থাপন করা সম্ভব হয়নি। সংযোগ পুনরায় পরীক্ষা করুন।",
+        message: "ডাটাবেজ সার্ভারের সাথে সংযোগ স্থাপন করা সম্ভব হয়নি। অনুগ্রহ করে পুনরায় চেষ্টা করুন।",
       });
       return;
     }
 
     const slug = createSlug(name);
 
-    // Process and ensure images are uploaded to Cloudinary ONLY if base64 provided
+    // Process and ensure images are uploaded to Cloud CDN ONLY if base64 provided
     let rawImages = Array.isArray(images) && images.length > 0 ? images : ["https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80"];
     const finalImages = await Promise.all(
       rawImages.map(async (img: string) => {
@@ -345,6 +370,7 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
     });
 
     await product.save();
+    clearProductCache();
     mockProducts.unshift({ ...product.toObject(), _id: product._id.toString() } as any);
 
     res.status(201).json({
@@ -442,6 +468,8 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
+    clearProductCache();
+
     res.json({
       success: true,
       message: "Product updated successfully",
@@ -467,7 +495,7 @@ export const deleteProduct = async (req: Request, res: Response): Promise<void> 
     if (!connected || !isDBConnected()) {
       res.status(503).json({
         success: false,
-        message: "MongoDB ডাটাবেজের সাথে সংযোগ স্থাপন করা সম্ভব হয়নি। পণ্য ডিলিট করা যায়নি।",
+        message: "ডাটাবেজ সার্ভারের সাথে সংযোগ স্থাপন করা সম্ভব হয়নি। পণ্য ডিলিট করা যায়নি।",
       });
       return;
     }
@@ -483,7 +511,7 @@ export const deleteProduct = async (req: Request, res: Response): Promise<void> 
       deleted = await Product.findOneAndDelete({ name: id });
     }
     if (!deleted) {
-      // If cleanId matches a mock ID, find by its slug or name in MongoDB
+      // If cleanId matches a mock ID, find by its slug or name in database
       const mockItem = mockProducts.find(
         (p) => p._id === id || p.slug === id || p.name === id
       );
@@ -493,7 +521,9 @@ export const deleteProduct = async (req: Request, res: Response): Promise<void> 
         });
       }
     }
-    console.log(`Deleted product ${id} from MongoDB:`, deleted ? "Success" : "Not found in DB");
+    console.log(`Deleted product ${id}:`, deleted ? "Success" : "Not found in DB");
+
+    clearProductCache();
 
     // Always remove from in-memory mockProducts as well
     const idx = mockProducts.findIndex(

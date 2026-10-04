@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { Admin } from "../models/Admin";
-import { isDBConnected } from "../config/db";
+import { isDBConnected, ensureDB } from "../config/db";
 
 const JWT_SECRET = process.env.JWT_SECRET || "gaxinmart_jwt_secret_key_2026_secure";
 
@@ -18,7 +18,9 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
     const defaultAdminEmail = (process.env.ADMIN_EMAIL || "gaxinmart@gmail.com").toLowerCase().trim();
     const defaultAdminPassword = process.env.ADMIN_PASSWORD || "gaxinmart3140";
 
-    // 1. If DB is connected, verify against MongoDB first so changed credentials immediately work!
+    await ensureDB();
+
+    // 1. Verify against Cloud Database first so changed credentials immediately work
     if (isDBConnected()) {
       const admin = await Admin.findOne({ email: normalizedEmail });
       if (admin && (await admin.comparePassword(password))) {
@@ -90,6 +92,8 @@ export const getAdminProfile = async (req: any, res: Response): Promise<void> =>
     const adminId = req.admin?.id;
     const adminEmail = req.admin?.email;
 
+    await ensureDB();
+
     if (isDBConnected()) {
       let admin = null;
       if (adminId && adminId.match(/^[0-9a-fA-F]{24}$/)) {
@@ -143,6 +147,8 @@ export const updateAdminCredentials = async (req: any, res: Response): Promise<v
     const defaultAdminPassword = process.env.ADMIN_PASSWORD || "gaxinmart3140";
     let isCurrentPassValid = false;
     let targetAdmin: any = null;
+
+    await ensureDB();
 
     if (isDBConnected()) {
       if (adminId && adminId.match(/^[0-9a-fA-F]{24}$/)) {

@@ -1,16 +1,18 @@
 import { Request, Response } from "express";
 import { Offer } from "../models/Offer";
 import { mockOffers, OfferRecord } from "../data/mockData";
-import { isDBConnected } from "../config/db";
+import { isDBConnected, ensureDB } from "../config/db";
 import { uploadStringToCloudinary } from "../config/cloudinary";
 
 // GET /api/offers/active (Public)
 export const getActiveOffers = async (req: Request, res: Response): Promise<void> => {
   try {
+    await ensureDB();
+
     if (isDBConnected()) {
       const [banners, notices] = await Promise.all([
-        Offer.find({ active: true, isNoticeTicker: false }).sort({ createdAt: -1 }),
-        Offer.find({ active: true, isNoticeTicker: true }).sort({ createdAt: -1 }),
+        Offer.find({ active: true, isNoticeTicker: false }).sort({ createdAt: -1 }).lean(),
+        Offer.find({ active: true, isNoticeTicker: true }).sort({ createdAt: -1 }).lean(),
       ]);
 
       if (banners.length > 0 || notices.length > 0) {
@@ -32,8 +34,10 @@ export const getActiveOffers = async (req: Request, res: Response): Promise<void
 // GET /api/offers (Admin Only)
 export const getAllOffers = async (req: Request, res: Response): Promise<void> => {
   try {
+    await ensureDB();
+
     if (isDBConnected()) {
-      const offers = await Offer.find().sort({ createdAt: -1 });
+      const offers = await Offer.find().sort({ createdAt: -1 }).lean();
       if (offers.length > 0) {
         res.json({ success: true, offers });
         return;
@@ -71,6 +75,8 @@ export const createOffer = async (req: Request, res: Response): Promise<void> =>
       finalBannerImage = await uploadStringToCloudinary(finalBannerImage, "gaxinmart/offers");
     }
 
+    await ensureDB();
+
     if (isDBConnected()) {
       const offer = new Offer({
         title: title || "Special Offer",
@@ -86,7 +92,7 @@ export const createOffer = async (req: Request, res: Response): Promise<void> =>
 
       await offer.save();
       mockOffers.unshift({ ...offer.toObject(), _id: offer._id.toString() } as any);
-      res.status(201).json({ success: true, message: "Offer created successfully in MongoDB", offer });
+      res.status(201).json({ success: true, message: "অফার সফলভাবে তৈরি হয়েছে", offer });
       return;
     }
 
@@ -104,7 +110,7 @@ export const createOffer = async (req: Request, res: Response): Promise<void> =>
       createdAt: new Date(),
     };
     mockOffers.unshift(newOffer);
-    res.status(201).json({ success: true, message: "Offer created successfully (In-Memory)", offer: newOffer });
+    res.status(201).json({ success: true, message: "অফার সফলভাবে তৈরি হয়েছে", offer: newOffer });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message || "Failed to create offer" });
   }
@@ -119,6 +125,8 @@ export const updateOffer = async (req: Request, res: Response): Promise<void> =>
     if (updates.bannerImage) {
       updates.bannerImage = await uploadStringToCloudinary(updates.bannerImage, "gaxinmart/offers");
     }
+
+    await ensureDB();
 
     let updatedMongoOffer = null;
     if (isDBConnected()) {
@@ -149,6 +157,8 @@ export const updateOffer = async (req: Request, res: Response): Promise<void> =>
 export const deleteOffer = async (req: Request, res: Response): Promise<void> => {
   try {
     const id = String(req.params.id);
+
+    await ensureDB();
 
     if (isDBConnected()) {
       await Offer.findByIdAndDelete(id);

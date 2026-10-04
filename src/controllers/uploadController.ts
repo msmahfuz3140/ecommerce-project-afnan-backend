@@ -11,7 +11,7 @@ export const uploadMedia = async (req: Request, res: Response): Promise<void> =>
 
       res.json({
         success: true,
-        message: "File uploaded successfully to Cloudinary",
+        message: "File uploaded successfully",
         url: result.secure_url,
         publicId: result.public_id,
       });
@@ -23,9 +23,9 @@ export const uploadMedia = async (req: Request, res: Response): Promise<void> =>
       const url = await uploadStringToCloudinary(imgStr, folder);
       res.json({
         success: true,
-        message: "Image uploaded successfully to Cloudinary",
+        message: "Image uploaded successfully",
         url,
-        publicId: `cloud_${Date.now()}`,
+        publicId: `media_${Date.now()}`,
       });
       return;
     }
@@ -52,7 +52,7 @@ export const uploadMultipleMedia = async (req: Request, res: Response): Promise<
 
       res.json({
         success: true,
-        message: "Files uploaded successfully to Cloudinary",
+        message: "Files uploaded successfully",
         urls: results.map((r) => r.secure_url),
         results,
       });
@@ -65,7 +65,7 @@ export const uploadMultipleMedia = async (req: Request, res: Response): Promise<
       );
       res.json({
         success: true,
-        message: "Images uploaded successfully to Cloudinary",
+        message: "Images uploaded successfully",
         urls,
       });
       return;

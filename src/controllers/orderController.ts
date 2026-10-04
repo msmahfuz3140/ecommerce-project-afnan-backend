@@ -3,6 +3,7 @@ import { Order, OrderStatus } from "../models/Order";
 import { Product } from "../models/Product";
 import { mockOrders, mockProducts, OrderRecord } from "../data/mockData";
 import { isDBConnected, ensureDB } from "../config/db";
+import { clearAnalyticsCache } from "./analyticsController";
 
 const generateOrderId = (): string => {
   const randomDigits = Math.floor(100000 + Math.random() * 900000);
@@ -37,7 +38,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       let product: any = null;
       if (isDBConnected()) {
         try {
-          product = await Product.findById(prodId);
+          product = await Product.findById(prodId).lean();
         } catch (e) {}
       }
 
@@ -123,6 +124,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
     if (isDBConnected()) {
       const order = new Order(orderData);
       await order.save();
+      clearAnalyticsCache();
       mockOrders.unshift({ ...order.toObject(), _id: order._id.toString() } as any);
 
       res.status(201).json({
@@ -138,6 +140,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       ...orderData,
     };
     mockOrders.unshift(savedMockOrder);
+    clearAnalyticsCache();
     res.status(201).json({
       success: true,
       message: "Order placed successfully! We will contact you soon.",
@@ -153,6 +156,8 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
 export const getOrders = async (req: Request, res: Response): Promise<void> => {
   try {
     const { status, search, page = 1, limit = 50 } = req.query;
+
+    await ensureDB();
 
     if (!isDBConnected()) {
       let filtered = [...mockOrders];
@@ -202,7 +207,7 @@ export const getOrders = async (req: Request, res: Response): Promise<void> => {
     const skip = (pageNumber - 1) * pageSize;
 
     const [orders, total, statusCounts] = await Promise.all([
-      Order.find(filter).sort({ createdAt: -1 }).skip(skip).limit(pageSize),
+      Order.find(filter).sort({ createdAt: -1 }).skip(skip).limit(pageSize).lean(),
       Order.countDocuments(filter),
       Order.aggregate([
         { $group: { _id: "$status", count: { $sum: 1 } } },
@@ -259,6 +264,8 @@ export const getOrderById = async (req: Request, res: Response): Promise<void> =
   try {
     const id = String(req.params.id);
 
+    await ensureDB();
+
     if (!isDBConnected()) {
       const order = mockOrders.find((o) => o._id === id || o.orderId === id);
       if (!order) {
@@ -311,6 +318,8 @@ export const updateOrderStatus = async (req: Request, res: Response): Promise<vo
       return;
     }
 
+    await ensureDB();
+
     if (!isDBConnected()) {
       const order = mockOrders.find((o) => o._id === id || o.orderId === id);
       if (!order) {
@@ -323,6 +332,7 @@ export const updateOrderStatus = async (req: Request, res: Response): Promise<vo
         changedAt: new Date(),
         note: note || `Status updated to ${status}`,
       });
+      clearAnalyticsCache();
       res.json({ success: true, message: `Order status updated to ${status}`, order });
       return;
     }
@@ -341,6 +351,7 @@ export const updateOrderStatus = async (req: Request, res: Response): Promise<vo
     });
 
     await order.save();
+    clearAnalyticsCache();
     res.json({ success: true, message: `Order status updated to ${status}`, order });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message || "Failed to update order status" });
@@ -352,6 +363,8 @@ export const trackOrder = async (req: Request, res: Response): Promise<void> => 
   try {
     const query = String(req.params.query);
     const cleanQuery = query.trim().toLowerCase();
+
+    await ensureDB();
 
     if (!isDBConnected()) {
       const orders = mockOrders.filter(

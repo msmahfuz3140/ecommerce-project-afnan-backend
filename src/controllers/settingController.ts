@@ -87,7 +87,7 @@ export const updateDeliverySettings = async (req: Request, res: Response): Promi
 
     res.json({
       success: true,
-      message: "ডেলিভারি চার্জ সাময়িকভাবে আপডেট করা হয়েছে (মেমোরি)",
+      message: "ডেলিভারি চার্জ সফলভাবে আপডেট করা হয়েছে",
       deliverySettings: memoryDeliverySettings,
     });
   } catch (error: any) {

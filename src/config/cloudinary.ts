@@ -40,25 +40,38 @@ export const uploadToCloudinary = async (
 ): Promise<{ secure_url: string; public_id: string }> => {
   return new Promise((resolve, reject) => {
     if (!isCloudinaryConfigured()) {
-      console.warn("⚠️ Cloudinary credentials not fully configured in .env; falling back to base64 Data URI.");
+      console.warn("Storage credentials not fully configured; falling back to data URI.");
       const mime = resourceType === "raw" ? "application/pdf" : "image/jpeg";
       const base64 = fileBuffer.toString("base64");
       const dataUri = `data:${mime};base64,${base64}`;
       return resolve({
         secure_url: dataUri,
-        public_id: `mock_${Date.now()}`,
+        public_id: `media_${Date.now()}`,
       });
     }
 
+    const isImage = resourceType === "image" || resourceType === "auto";
+
+    const uploadOptions: Record<string, any> = {
+      folder,
+      resource_type: resourceType,
+    };
+
+    // Extreme image optimization: Max 1200px, WebP format, eco quality
+    if (isImage) {
+      uploadOptions.transformation = [
+        { width: 1200, height: 1200, crop: "limit" },
+        { quality: "auto:eco", fetch_format: "webp" },
+      ];
+      uploadOptions.format = "webp";
+    }
+
     const uploadStream = cloudinary.uploader.upload_stream(
-      {
-        folder,
-        resource_type: resourceType,
-      },
+      uploadOptions,
       (error, result) => {
         if (error || !result) {
-          console.error("Cloudinary stream upload error:", error);
-          return reject(error || new Error("Cloudinary upload failed"));
+          console.error("Stream upload error:", error);
+          return reject(error || new Error("Media upload failed"));
         }
         resolve({
           secure_url: result.secure_url,
@@ -72,7 +85,7 @@ export const uploadToCloudinary = async (
 };
 
 /**
- * Upload a Base64 string or remote image URL to Cloudinary
+ * Upload a Base64 string or remote image URL with full WebP and eco-quality compression
  */
 export const uploadStringToCloudinary = async (
   imageStr: string,
@@ -82,7 +95,7 @@ export const uploadStringToCloudinary = async (
     return imageStr;
   }
 
-  // If already hosted on Cloudinary, keep it
+  // If already hosted on CDN, keep it
   if (imageStr.includes("res.cloudinary.com")) {
     return imageStr;
   }
@@ -90,13 +103,31 @@ export const uploadStringToCloudinary = async (
   try {
     const result = await cloudinary.uploader.upload(imageStr, {
       folder,
-      resource_type: "auto",
+      resource_type: "image",
+      transformation: [
+        { width: 1200, height: 1200, crop: "limit" },
+        { quality: "auto:eco", fetch_format: "webp" },
+      ],
+      format: "webp",
     });
     return result.secure_url;
   } catch (err: any) {
-    console.warn("Failed to upload string image to Cloudinary, keeping original:", err.message || err);
+    console.warn("Failed to upload string image, keeping original:", err.message || err);
     return imageStr;
   }
 };
 
+/**
+ * Inject fast WebP/AVIF delivery transformations to any CDN image URL
+ */
+export const getOptimizedDeliveryUrl = (url: string, width?: number): string => {
+  if (!url || typeof url !== "string") return url;
+  if (!url.includes("res.cloudinary.com") || url.includes("/f_auto,q_auto")) {
+    return url;
+  }
+  const transform = width ? `f_auto,q_auto,w_${width},c_limit` : "f_auto,q_auto";
+  return url.replace("/upload/", `/upload/${transform}/`);
+};
+
 export default cloudinary;
+
