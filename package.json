@@ -23,7 +23,8 @@
     "jsonwebtoken": "^9.0.3",
     "mongodb": "^7.6.0",
     "mongoose": "^9.10.2",
-    "multer": "^2.4.0"
+    "multer": "^2.4.0",
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -32,6 +33,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^2.2.0",
     "@types/node": "^26.6.2",
+    "@types/sharp": "^0.31.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
