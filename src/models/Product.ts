@@ -144,6 +144,5 @@ ProductSchema.index({ createdAt: -1 });
 ProductSchema.index({ category: 1, createdAt: -1 });
 ProductSchema.index({ sellPrice: 1 });
 ProductSchema.index({ isFeatured: 1 });
-ProductSchema.index({ isOffer: 1 });
 
 export const Product = mongoose.model<IProduct>("Product", ProductSchema);

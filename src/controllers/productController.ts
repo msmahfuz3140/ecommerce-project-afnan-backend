@@ -321,11 +321,21 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
 
     const slug = createSlug(name);
 
-    // Process and ensure images are uploaded to Cloud CDN ONLY if base64 provided
-    let rawImages = Array.isArray(images) && images.length > 0 ? images : ["https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80"];
+    // Process and ensure images are uploaded to Cloud CDN
+    const rawImages = Array.isArray(images)
+      ? images.filter((img) => typeof img === "string" && img.trim().length > 0)
+      : typeof images === "string" && images.trim().length > 0
+      ? [images.trim()]
+      : [];
+
+    if (rawImages.length === 0) {
+      res.status(400).json({ success: false, message: "পণ্যের অন্তত একটি ছবি যোগ করা আবশ্যক।" });
+      return;
+    }
+
     const finalImages = await Promise.all(
       rawImages.map(async (img: string) => {
-        if (typeof img === "string" && img.startsWith("data:")) {
+        if (typeof img === "string" && img.startsWith("data:image/")) {
           try {
             return await uploadStringToCloudinary(img, "gaxinmart/products");
           } catch {
@@ -393,9 +403,12 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
 
     // Process images with Cloudinary if updated
     if (updates.images && Array.isArray(updates.images)) {
+      const cleanImages = updates.images.filter(
+        (img: any) => typeof img === "string" && img.trim().length > 0
+      );
       updates.images = await Promise.all(
-        updates.images.map(async (img: string) => {
-          if (typeof img === "string" && img.startsWith("data:")) {
+        cleanImages.map(async (img: string) => {
+          if (typeof img === "string" && img.startsWith("data:image/")) {
             try {
               return await uploadStringToCloudinary(img, "gaxinmart/products");
             } catch {
@@ -442,19 +455,6 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
       }
       if (!updatedMongoProduct) {
         updatedMongoProduct = await Product.findOneAndUpdate({ slug: id }, updates, { new: true, runValidators: true });
-      }
-      if (!updatedMongoProduct) {
-        updatedMongoProduct = await Product.findOneAndUpdate({ name: id }, updates, { new: true, runValidators: true });
-      }
-      if (!updatedMongoProduct) {
-        const mockItem = mockProducts.find((p) => p._id === id || p.slug === id || p.name === id);
-        if (mockItem) {
-          updatedMongoProduct = await Product.findOneAndUpdate(
-            { $or: [{ slug: mockItem.slug }, { name: mockItem.name }] },
-            updates,
-            { new: true, runValidators: true }
-          );
-        }
       }
     }
 
@@ -506,20 +506,6 @@ export const deleteProduct = async (req: Request, res: Response): Promise<void> 
     }
     if (!deleted) {
       deleted = await Product.findOneAndDelete({ slug: id });
-    }
-    if (!deleted) {
-      deleted = await Product.findOneAndDelete({ name: id });
-    }
-    if (!deleted) {
-      // If cleanId matches a mock ID, find by its slug or name in database
-      const mockItem = mockProducts.find(
-        (p) => p._id === id || p.slug === id || p.name === id
-      );
-      if (mockItem) {
-        deleted = await Product.findOneAndDelete({
-          $or: [{ slug: mockItem.slug }, { name: mockItem.name }],
-        });
-      }
     }
     console.log(`Deleted product ${id}:`, deleted ? "Success" : "Not found in DB");
 
